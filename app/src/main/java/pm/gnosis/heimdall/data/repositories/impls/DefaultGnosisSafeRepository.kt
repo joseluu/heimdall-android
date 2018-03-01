@@ -10,9 +10,7 @@ import pm.gnosis.ethereum.*
 import pm.gnosis.ethereum.models.TransactionParameters
 import pm.gnosis.ethereum.models.TransactionReceipt
 import pm.gnosis.heimdall.GnosisSafe
-import pm.gnosis.heimdall.GnosisSafe.GetOwners
-import pm.gnosis.heimdall.GnosisSafe.Threshold
-import pm.gnosis.heimdall.GnosisSafe.IsOwner
+import pm.gnosis.heimdall.GnosisSafe.*
 import pm.gnosis.heimdall.ProxyFactory
 import pm.gnosis.heimdall.data.db.ApplicationDb
 import pm.gnosis.heimdall.data.db.models.GnosisSafeDb
@@ -116,12 +114,12 @@ class DefaultGnosisSafeRepository @Inject constructor(
             }
     }
 
-    override fun deploy(
-        name: String?,
-        devices: Set<BigInteger>,
-        requiredConfirmations: Int,
-        overrideGasPrice: Wei?
-    ): Completable {
+    override fun getDeployData(name: String?, devices: Set<BigInteger>, requiredConfirmations: Int, overrideGasPrice: Wei?): Single<Transaction> {
+        return loadSafeDeployParams(devices, requiredConfirmations)
+            .map { Transaction(address = it.factoryAddress, data = it.data) }
+    }
+
+    override fun deploy(name: String?, devices: Set<BigInteger>, requiredConfirmations: Int, overrideGasPrice: Wei?): Completable {
         return loadSafeDeployParams(devices, requiredConfirmations)
             .flatMap {
                 val params = it.transactionParameters
@@ -143,6 +141,10 @@ class DefaultGnosisSafeRepository @Inject constructor(
                 }
             }
     }
+
+    override fun savePendingSafe(transactionHash: BigInteger, name: String): Completable = Completable.fromAction {
+        safeDao.insertPendingSafe(PendingGnosisSafeDb(transactionHash, name))
+    }.subscribeOn(Schedulers.io())
 
     override fun observeDeployStatus(hash: String): Observable<String> {
         return ethereumRepository.getTransactionReceipt(hash)
@@ -244,7 +246,7 @@ class DefaultGnosisSafeRepository @Inject constructor(
         val threshold: EthRequest<String>,
         val owners: EthRequest<String>,
         val isOwner: EthRequest<String>
-    ): BulkRequest(balance, threshold, owners, isOwner)
+    ) : BulkRequest(balance, threshold, owners, isOwner)
 
     private data class SafeDeployParams(
         val account: Account,

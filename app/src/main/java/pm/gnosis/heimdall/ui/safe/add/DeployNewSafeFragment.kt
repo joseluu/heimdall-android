@@ -102,6 +102,15 @@ class DeployNewSafeFragment : BaseFragment() {
         disposables += viewModel.observeAdditionalOwners()
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe(::updateOwners, Timber::e)
+
+        disposables += layout_deploy_new_safe_deploy_external.clicks()
+            .flatMapSingle { viewModel.loadDeployData(layout_deploy_new_safe_name_input.text.toString()) }
+            .subscribeForResult(onNext = {
+                startActivityWithTransaction(it, onActivityNotFound = {
+                    activity?.toast(R.string.no_external_wallets)
+                    Timber.w("No activity resolved for intent")
+                })
+            }, onError = Timber::e)
     }
 
     private fun handleUserInput() =
@@ -162,6 +171,13 @@ class DeployNewSafeFragment : BaseFragment() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        handleTransactionHashResult(requestCode, resultCode, data,
+            { transactionHash ->
+                disposables += viewModel.saveTransactionHash(transactionHash, layout_deploy_new_safe_name_input.text.toString())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribeBy(onComplete = { safeDeployed(Unit) }, onError = Timber::e)
+            })
+
         handleQrCodeActivityResult(requestCode, resultCode, data,
             { parseEthereumAddress(it)?.let { addOwner(it.asEthereumAddressString()) } })
     }

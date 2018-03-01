@@ -135,7 +135,7 @@ class GnosisSafeTransactionRepository @Inject constructor(
         signatures: Map<BigInteger, Signature>,
         senderIsOwner: Boolean
     ): Single<GasEstimate> =
-        buildExecuteTransaction(safeAddress, transaction, signatures, senderIsOwner)
+        loadExecutableTransaction(safeAddress, transaction, signatures, senderIsOwner)
             .flatMap { executeTransaction ->
                 accountsRepository.loadActiveAccount().map { it to executeTransaction }
             }
@@ -156,12 +156,12 @@ class GnosisSafeTransactionRepository @Inject constructor(
         senderIsOwner: Boolean,
         overrideGasPrice: Wei?
     ): Completable =
-        buildExecuteTransaction(safeAddress, transaction, signatures, senderIsOwner)
+        loadExecutableTransaction(safeAddress, transaction, signatures, senderIsOwner)
             .flatMapObservable { submitSignedTransaction(it, overrideGasPrice) }
             .flatMapSingle { addLocalTransaction(safeAddress, transaction, it) }
             .ignoreElements()
 
-    private fun buildExecuteTransaction(
+    override fun loadExecutableTransaction(
         safeAddress: BigInteger,
         innerTransaction: Transaction,
         signatures: Map<BigInteger, Signature>,
@@ -234,11 +234,8 @@ class GnosisSafeTransactionRepository @Inject constructor(
             }
             .flatMap { ethereumRepository.sendRawTransaction(it) }
 
-    private fun addLocalTransaction(
-        safeAddress: BigInteger,
-        transaction: Transaction,
-        txChainHash: String
-    ): Single<String> =
+
+    override fun addLocalTransaction(safeAddress: BigInteger, transaction: Transaction, txChainHash: String): Single<String> =
         calculateHash(safeAddress, transaction).flatMap {
             Single.fromCallable {
                 val transactionUuid = UUID.randomUUID().toString()
@@ -296,12 +293,11 @@ class GnosisSafeTransactionRepository @Inject constructor(
         val threshold: EthRequest<String>,
         val nonce: EthRequest<String>,
         val owners: EthRequest<String>
-    ): BulkRequest(threshold, nonce, owners)
+    ) : BulkRequest(threshold, nonce, owners)
 
     companion object {
         private const val ERC191_BYTE = "19"
         private val DEFAULT_OPERATION = BigInteger.ZERO // Call
         private val DEFAULT_NONCE = BigInteger.ZERO
     }
-
 }

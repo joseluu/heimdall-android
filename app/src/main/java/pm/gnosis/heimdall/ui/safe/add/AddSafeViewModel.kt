@@ -1,6 +1,7 @@
 package pm.gnosis.heimdall.ui.safe.add
 
 import android.content.Context
+import io.reactivex.Completable
 import io.reactivex.Observable
 import io.reactivex.Single
 import io.reactivex.functions.Function
@@ -12,6 +13,7 @@ import pm.gnosis.heimdall.data.repositories.models.SafeInfo
 import pm.gnosis.heimdall.helpers.AddressStore
 import pm.gnosis.heimdall.ui.exceptions.SimpleLocalizedException
 import pm.gnosis.heimdall.utils.GnosisSafeUtils
+import pm.gnosis.models.Transaction
 import pm.gnosis.models.Wei
 import pm.gnosis.svalinn.accounts.base.models.Account
 import pm.gnosis.svalinn.accounts.base.repositories.AccountsRepository
@@ -21,6 +23,7 @@ import pm.gnosis.svalinn.common.utils.mapToResult
 import pm.gnosis.ticker.data.repositories.TickerRepository
 import pm.gnosis.ticker.data.repositories.models.Currency
 import pm.gnosis.utils.exceptions.InvalidAddressException
+import pm.gnosis.utils.hexAsBigInteger
 import pm.gnosis.utils.hexAsEthereumAddressOrNull
 import timber.log.Timber
 import java.math.BigInteger
@@ -74,6 +77,9 @@ class AddSafeViewModel @Inject constructor(
             }
             .mapToResult()
     }
+
+    override fun saveTransactionHash(transactionHash: String, name: String): Completable =
+        repository.savePendingSafe(transactionHash.hexAsBigInteger(), name)
 
     override fun observeEstimate(): Observable<Result<GasEstimate>> {
         return addressStore.observe().flatMapSingle {
@@ -133,4 +139,14 @@ class AddSafeViewModel @Inject constructor(
     private fun checkName(name: String) {
         if (name.isBlank()) throw SimpleLocalizedException(context.getString(R.string.error_blank_name))
     }
+
+    override fun loadDeployData(name: String): Single<Result<Transaction>> =
+        Single.fromCallable { checkName(name);name }
+            .flatMap {
+                addressStore.load().flatMap {
+                    // We add 1 owner because the current device will automatically be added as an owner
+                    repository.getDeployData(name, it, GnosisSafeUtils.calculateThreshold(it.size + 1), overrideGasPrice = null)
+                }
+            }
+            .mapToResult()
 }

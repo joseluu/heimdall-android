@@ -43,6 +43,9 @@ class ViewTransactionViewModel @Inject constructor(
         transactionRepository.checkSignature(safe, transaction, signature)
             .onErrorResumeNext { Single.error(SimpleLocalizedException(context.getString(R.string.invalid_signature))) }
 
+    override fun addLocalTransaction(safeAddress: BigInteger, transaction: Transaction, txChainHash: String): Single<String> =
+        transactionRepository.addLocalTransaction(safeAddress, transaction, txChainHash)
+
     override fun observeSignaturePushes(safeAddress: BigInteger, transaction: Transaction): Observable<Result<Unit>> =
         signaturePushRepository.observe(safeAddress)
             .flatMapSingle {
@@ -116,6 +119,15 @@ class ViewTransactionViewModel @Inject constructor(
             .onErrorResumeNext({ errorHandler.single(it) })
             .mapToResult()
     }
+
+    override fun loadExecutableTransaction(safeAddress: BigInteger, transaction: Transaction): Single<Transaction> =
+        transactionRepository.loadExecuteInformation(safeAddress, transaction)
+            .flatMap { info ->
+                // Observe local signature store
+                signatureStore.load()
+                    .map { info.check(it); it }
+                    .flatMap { transactionRepository.loadExecutableTransaction(safeAddress, info.transaction, it, info.isOwner) }
+            }
 
     override fun signTransaction(safeAddress: BigInteger, transaction: Transaction, sendViaPush: Boolean): Single<Result<Pair<String, Bitmap?>>> {
         return transactionRepository.sign(safeAddress, transaction)
