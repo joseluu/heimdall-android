@@ -9,16 +9,15 @@ import io.reactivex.schedulers.Schedulers
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import pm.gnosis.ethereum.EthereumRepository
-import pm.gnosis.ethereum.rpc.EthereumRpcApi
+import pm.gnosis.ethereum.rpc.EthereumRpcConnector
 import pm.gnosis.ethereum.rpc.RpcEthereumRepository
 import pm.gnosis.ethereum.rpc.retrofit.RetrofitEthereumRpcApi
+import pm.gnosis.ethereum.rpc.retrofit.RetrofitEthereumRpcConnector
 import pm.gnosis.heimdall.BuildConfig
 import pm.gnosis.heimdall.data.adapters.HexNumberAdapter
 import pm.gnosis.heimdall.data.adapters.WeiAdapter
 import pm.gnosis.heimdall.data.db.ApplicationDb
-import pm.gnosis.heimdall.data.remote.EthGasStationApi
-import pm.gnosis.heimdall.data.remote.IpfsApi
-import pm.gnosis.heimdall.data.remote.PushServiceApi
+import pm.gnosis.heimdall.data.remote.*
 import pm.gnosis.svalinn.common.di.ApplicationContext
 import pm.gnosis.ticker.data.remote.TickerAdapter
 import retrofit2.Retrofit
@@ -36,7 +35,7 @@ class ApplicationModule {
 
     @Provides
     @Singleton
-    fun providesEthereumRepository(ethereumRpcApi: EthereumRpcApi): EthereumRepository =
+    fun providesEthereumRepository(ethereumRpcApi: EthereumRpcConnector): EthereumRepository =
         RpcEthereumRepository(ethereumRpcApi)
 
     @Provides
@@ -64,7 +63,7 @@ class ApplicationModule {
     @Provides
     @Singleton
     fun providesEthereumJsonRpcApi(moshi: Moshi, @Named(INFURA_REST_CLIENT) client: OkHttpClient)
-            : EthereumRpcApi {
+            : RetrofitEthereumRpcApi {
         val retrofit = Retrofit.Builder()
             .client(client)
             .baseUrl(BuildConfig.BLOCKCHAIN_NET_URL)
@@ -73,6 +72,11 @@ class ApplicationModule {
             .build()
         return retrofit.create(RetrofitEthereumRpcApi::class.java)
     }
+
+    @Provides
+    @Singleton
+    fun providesEthereumJsonRpcConnector(retrofitApi: RetrofitEthereumRpcApi): EthereumRpcConnector =
+        RetrofitEthereumRpcConnector(retrofitApi)
 
     @Provides
     @Singleton
@@ -97,6 +101,19 @@ class ApplicationModule {
             .addCallAdapterFactory(RxJava2CallAdapterFactory.createWithScheduler(Schedulers.io()))
             .build()
         return retrofit.create(PushServiceApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun providesTxExecutorApi(moshi: Moshi, client: OkHttpClient): TxExecutorApi {
+        val retrofit = Retrofit.Builder()
+            // Increase timeout since our server goes to sleeps
+            .client(client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build())
+            .baseUrl(TxExecutorApi.BASE_URL)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .addCallAdapterFactory(RxJava2CallAdapterFactory.createWithScheduler(Schedulers.io()))
+            .build()
+        return retrofit.create(TxExecutorApi::class.java)
     }
 
     @Provides
